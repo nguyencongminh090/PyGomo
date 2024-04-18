@@ -259,7 +259,8 @@ class Move:
                     'ev'   : Evaluation(self.__info[self.__info.index('ev') + 1]),
                     'nodes': self.__info[self.__info.index('n') + 1],
                     'pv'   : self.__info[self.__info.index('pv') + 1:],
-                    'tm'   : int(self.__info[self.__info.index('tm') + 1]) / 1000}
+                    'tm'   : int(self.__info[self.__info.index('tm') + 1]) / 1000,
+                    'n/ms' : self.__info[self.__info.index('n/ms') + 1]}
         return infoDict
 
 
