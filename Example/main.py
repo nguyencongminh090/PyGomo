@@ -260,6 +260,7 @@ class Command:
                 print(f'- Depth: {enMove.info["depth"]}')
                 print(f'- Eval : {enMove.info["ev"].toWinrate()}')
                 print(f'- Nodes: {enMove.info["nodes"]}')
+                print(f'- Speed: {enMove.info["n/ms"]}')
                 print(f'- Time : {enMove.info["tm"]}s')
                 print(f'- Pv   : {enMove.info["pv"]}')
                 print()
@@ -406,7 +407,7 @@ class Command:
 
 
 def main():
-    engine     = PyGomo.Engine(r'/kaggle/working/PyGomo/Example/Engine/Window/pbrain-rapfi')
+    engine     = PyGomo.Engine(r'Engine\Window\engine.exe')
     protocol   = PyGomo.Protocol()
     controller = PyGomo.Controller(engine, protocol)
     userInterface = UserInterface(controller)
