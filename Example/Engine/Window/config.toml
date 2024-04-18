@@ -1,0 +1,159 @@
+[requirement]
+# specify the minimal version of rapfi this config suits to
+min_version = [0,39,1]
+
+[general]
+# Reload config file on each move
+reload_config_each_move = false
+
+# Clear TT after config is loaded
+clear_hash_after_config_loaded = false
+
+# Default thread number if not specified (0 means use all hardware concurrency)
+default_thread_num = 0
+
+# Output message mode (Options are [normal, brief, ucilike, none])
+message_mode = "ucilike"
+
+# Coordinate convertion mode (Options are [none, X_flipY, flipY_X])
+# For Piskvork, choose "none".
+# For Yixin-Board GUI, choose "flipY_X".
+coord_conversion_mode = "none"
+
+# Default candidate range (Options are [square2, square2_line3, square3, square3_line4, square4, full_board])
+default_candidate_range = "full_board"
+
+# Memory reserved for stuff other than hash table in max_memory option
+memory_reserved_mb = 0
+
+# Default transposition table size in KB
+default_tt_size_kb = 2097152
+
+
+[model]
+binary_file = "model210901.bin"
+
+
+[model.evaluator]
+# Type of the evaluator (Options are [mix6nnue, mix7nnue])
+type = "mix8nnue"
+
+# Win/loss rate limit that mapped to +/-20000 value
+wlr_mate_value = 0.985
+
+# The winning rate of black when the game is a draw, in [0, 1] (default is 0.5).
+draw_black_winrate = 0.5
+
+# The ratio of adjust draw rate, in [0, 1] (default is 1.0).
+draw_ratio = 1.0
+
+# Path to NNUE weights (do not change this unless you know what you are doing)
+[[model.evaluator.weights]]
+weight_file = "mix8freestyle_bs15.bin.lz4"
+[[model.evaluator.weights]]
+weight_file = "mix8freestyle_bsmix.bin.lz4"
+[[model.evaluator.weights]]
+weight_file = "mix8standard_bs15.bin.lz4"
+[[model.evaluator.weights]]
+weight_file_black = "mix8renju_bs15_black.bin.lz4"
+weight_file_white = "mix8renju_bs15_white.bin.lz4"
+
+
+
+[search]
+# Whether to enable aspiration window
+aspiration_window = true
+# Number of iterations after we found a mate
+num_iteration_after_mate = 8
+# Number of iterations after we found only one non-losing move at root
+num_iteration_after_singular_root = 8
+# Max depth to search (in range [2,200])
+max_search_depth = 200
+
+
+[search.timectl]
+# Number of moves spared for the rest of game
+match_space = 21.0
+# Minimum number of moves spared for the rest of game
+match_space_min = 7.0
+# Average branch factor to whether next depth has enough time
+average_branch_factor = 1.7
+# Exit search if turn time is used more than this ratio (even given ample match time)
+advanced_stop_ratio = 0.9
+# Plan time management at most this many moves ahead
+move_horizon = 64
+
+
+[database]
+# Automatic enable the database
+enable_by_default = false
+# Database type (Options are [yixindb])
+type = "yixindb"
+# Database path
+url = "rapfi.db"
+
+[database.yixindb]
+# Save using the compressed format (uncompressed database can be opened by Yixin)
+compressed_save = true
+# Automatic save the database when closing
+save_on_close = true
+# Number of backup files kept when saving
+num_backups_on_save = 2
+# Ignore corrupted database record when loading database file
+ignore_corrupted = true
+
+[database.search]
+# Whether to write/update the database in search
+readonly_mode = false
+
+# Search before this ply is required to query the database
+query_ply = 3
+# How many iteration needed to increase one database query ply
+pv_iter_per_ply_increment = 1
+# How many iteration needed to increase one database query ply
+nonpv_iter_per_ply_increment = 2
+
+# PV node before this ply is required to write the database
+pv_write_ply = 225
+# How many depth needed to add a new record in PV node
+pv_write_min_depth = 25
+# NonPV node before this ply is required to write the database
+nonpv_write_ply = 0
+# How many depth needed to add a new record in NonPV node
+nonpv_write_min_depth = 25
+# Mate node before this ply is required to write the database
+mate_write_ply = 10
+# How many depth needed to add a new record in Mate node
+mate_write_min_depth = 18
+# For mate longer than this step, we will try to write the record
+mate_write_min_step = 10
+# For mate within this branch size, we will try to write the record
+mate_write_branch = 5
+
+# For record found less then this ply, it will try to overwrite it with exact record
+exact_overwrite_ply = 100
+# For record found less then this ply, it will try to overwrite it with non-exact record
+nonexact_overwrite_ply = 0
+# The overwrite rule to write the database
+# Options are [better_value_depth_bound, better_depth_bound, better_value, better_label, always, disabled].
+overwrite_rule = "better_value_depth_bound"
+# The bias added to the exact bound when comparing
+overwrite_exact_bias = 3
+# The bias added to the old depth bound when comparing
+overwrite_depth_bound_bias = -1
+# The bias added to the queried depth bound when comparing
+query_result_depth_bound_bias = 0
+
+
+[database.libfile]
+
+# Mapping of marks in library file
+# Lib文件标记映射
+black_win_mark = "a"
+white_win_mark = "c"
+black_lose_mark = "c"
+white_lose_mark = "a"
+
+# Ignore all comments in imported library file
+# 是否忽略导入的Lib文件中的注释
+ignore_comment = true
