@@ -220,6 +220,7 @@ class Command:
             'timeout_turn' : time,
             'game_type'    : 1,
             'rule'         : rule,
+            'ponder'       : 1,
             'usedatabase'  : 1}
 
         self.__loadEngine(config)
@@ -233,7 +234,7 @@ class Command:
             if compTurn == turn and turn == 0:
 
                 start = clock()
-                self.__controller.protocol().setPos(listOfMove)
+                self.__controller.setPos(listOfMove)
                 stop = clock()
                 move = self.__controller.get("move")
 
@@ -249,7 +250,7 @@ class Command:
                 turn = (turn + 1) % 2
                 listOfMove.append(move)
             elif compTurn == turn:
-                self.__controller.protocol().playMove(listOfMove[-1])
+                self.__controller.playMove(listOfMove[-1])
 
                 start = clock()
                 enMove: PyGomo.Move = self.__controller.get("move")
@@ -260,7 +261,6 @@ class Command:
                 print(f'- Depth: {enMove.info["depth"]}')
                 print(f'- Eval : {enMove.info["ev"].toWinrate()}')
                 print(f'- Nodes: {enMove.info["nodes"]}')
-                print(f'- Speed: {enMove.info["n/ms"]}')
                 print(f'- Time : {enMove.info["tm"]}s')
                 print(f'- Pv   : {enMove.info["pv"]}')
                 print()
@@ -312,11 +312,12 @@ class Command:
 
         config = {
             'timeout_match': time,
-            'timeout_turn': time,
-            'time_left'   : time,
-            'game_type': 1,
-            'rule': rule,
-            'usedatabase': 1}
+            'timeout_turn' : time,
+            'time_left'    : time,
+            'game_type'    : 1,
+            'rule'         : rule,
+            'pondering'    : 1,
+            'usedatabase'  : 1}
 
         self.__loadEngine(config)
         if self.__controller.isReady(self.__size):
@@ -328,7 +329,7 @@ class Command:
         while True:
             if compTurn == turn and first:
 
-                self.__controller.protocol().setPos(listOfMove)
+                self.__controller.setPos(listOfMove)
 
                 start = clock()
                 enMove: PyGomo.Move = self.__controller.get("move")
@@ -339,7 +340,6 @@ class Command:
                 print(f'- Depth: {enMove.info["depth"]}')
                 print(f'- Eval : {enMove.info["ev"].toWinrate()}')
                 print(f'- Nodes: {enMove.info["nodes"]}')
-                print(f'- Speed: {enMove.info["n/ms"]}')
                 print(f'- Time : {enMove.info["tm"]}s')
                 print(f'- Pv   : {enMove.info["pv"]}')
                 print()
@@ -356,7 +356,8 @@ class Command:
 
                 first = False
             elif compTurn == turn:
-                self.__controller.protocol().playMove(listOfMove[-1])
+                self.__controller.updateTimeLeft()
+                self.__controller.playMove(listOfMove[-1])
 
                 start = clock()
                 enMove: PyGomo.Move = self.__controller.get("move")
@@ -367,7 +368,6 @@ class Command:
                 print(f'- Depth: {enMove.info["depth"]}')
                 print(f'- Eval : {enMove.info["ev"].toWinrate()}')
                 print(f'- Nodes: {enMove.info["nodes"]}')
-                print(f'- Speed: {enMove.info["n/ms"]}')
                 print(f'- Time : {enMove.info["tm"]}s')
                 print(f'- Pv   : {enMove.info["pv"]}')
                 print()
@@ -401,15 +401,19 @@ class Command:
         self.__board.clear()
 
     def __loadEngine(self, config: dict):
-        self.__controller.setConfig(config)
+        self.__controller.setConfigures(config)
         self.__controller.setTimeMatch(config['timeout_match'])
         self.__controller.setTimeLeft(config['timeout_match'])
 
 
 def main():
-    engine     = PyGomo.Engine(r'Engine\Window\engine.exe')
-    protocol   = PyGomo.Protocol()
-    controller = PyGomo.Controller(engine, protocol)
+    engine     = PyGomo.Engine(r'D:\Python\EngineModule\GomokuTool\PyGomo v2\Engine\engine.exe')
+    protocol   = PyGomo.GomocupProtocol()
+    controller = PyGomo.Controller()
+
+    controller.setProtocol(protocol)
+    controller.setEngine(engine)
+
     userInterface = UserInterface(controller)
     userInterface.start()
 
