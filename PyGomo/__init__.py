@@ -294,11 +294,6 @@ class Controller:
         self.__protocol.setConfig(keyword, value)
 
 
-class Setting:
-    def __init__(self):
-        self.TimeManage = TimeSetting()
-
-
 class TimeSetting:
     def __init__(self):
         """
