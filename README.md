@@ -1,2 +1,2 @@
 # PyGomo
-![Image](https://github.com/nguyencongminh090/PyGomo/blob/5277c1769f5db5ad6a06ed690efb76690916a893/UML%20diagram.png?raw=True)
+![Image](https://github.com/nguyencongminh090/PyGomo/blob/11ee13e7a88ba72373f6f28cd68967389a8f85a6/UML%20diagram.png)
