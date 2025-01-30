@@ -407,7 +407,7 @@ class Command:
 
 
 def main():
-    engine     = PyGomo.Engine(r'D:\Python\EngineModule\GomokuTool\PyGomo v2\Engine\engine.exe')
+    engine     = PyGomo.Engine(r'D:\Github\PyGomo\Example\Engine\Window\engine.exe')
     protocol   = PyGomo.GomocupProtocol()
     controller = PyGomo.Controller()
 

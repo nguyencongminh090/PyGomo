@@ -1,346 +1,294 @@
-import subprocess
+
 from queue import Queue, Empty
 from threading import Thread
+from typing import TextIO, Callable, Tuple, Union
+from abc import ABC, abstractmethod
+import re
 import math
-from abc import ABC
+import subprocess
 
 
 class StdoutReader:
     """
-    stdout -> string
-    Read output from engine
-    Output include 2 types:
-        - Message (start with MESSAGE ...)
-        - No prefix (ex: "OK", ...)
-        - Coord ("7,7", ...)
+    Handle stdout from engine.
     """
-    def __init__(self, stream):
-        self.__stream = stream
-        self.__queueMessage = Queue()
-        self.__queueOutput = Queue()
-        self.__queueCoord = Queue()
+    def __init__(self, stream: TextIO):
+        self.__stream        = stream
+        self.__queues        = {}
+        self.__filters       = {}
 
-        self.__thread = Thread(target=self.__populateQueue)
+        self.__thread        = Thread(target=self.__populate_queue)
         self.__thread.daemon = True
         self.__thread.start()
 
-    def __populateQueue(self):
+    def add_category(self, category: str, filter_func):
+        if category in self.__queues:
+            raise ValueError(f"Category '{category}' already exists.")
+        self.__queues[category]  = Queue()
+        self.__filters[category] = filter_func
+
+    def __populate_queue(self):
         while True:
-            line = self.__stream.readline().strip()
+            line = self.__stream.readline()
+            # Break on EOF
             if line == '':
-                continue
-            elif self.isMessage(line):
-                self.__queueMessage.put(line)
-            elif self.isCoord(line):
-                self.__queueCoord.put(line)
-            elif self.isOutput(line):
-                self.__queueOutput.put(line)
-            elif line is None:
                 break
 
-    def isOutputQueueEmpty(self) -> bool:
-        return self.__queueOutput.empty()
+            line = line.strip().lower()
+            if not line:
+                continue
+            
+            for category, filter_func in self.__filters.items():
+                if filter_func(line):
+                    self.__queues[category].put(line)
+                    break
 
-    def isMessageQueueEmpty(self) -> bool:
-        return self.__queueMessage.empty()
+    def get(self, category: str, timeout: float = 0.0, reset: bool = False) -> str:
+        if category not in self.__queues:
+            validCategories = ", ".join(self.__queues.keys())
+            raise ValueError(f"Unsupported category '{category}'. Valid options are: {validCategories}")
 
-    def isCoordQueueEmpty(self) -> bool:
-        return self.__queueCoord.empty()
+        if reset:
+            self.reset_queue(self.__queues[category])
 
-    @staticmethod
-    def isMessage(line) -> bool:
-        """Return True if line is Message"""
-        return line.lower().startswith('message')
-
-    @staticmethod
-    def isOutput(line: str) -> bool:
-        """Return True if line is output"""
-        return not line.lower().startswith('error')
-
-    @staticmethod
-    def isCoord(line) -> bool:
-        if line.lower() == 'swap':
-            return True
-        for coord in line.split():
-            if not coord.split(',')[0].isnumeric() or not coord.split(',')[1].isnumeric():
-                return False
-        return True
-
-    def getMessage(self, timeout=0.0):
         try:
-            output = self.__queueMessage.get(block=True, timeout=timeout)
-            return output if output is not None else ''
+            return self.__queues[category].get(block=True, timeout=timeout)
         except Empty:
-            return None
-
-    def getOutput(self, timeout=0.0):
-        try:
-            output = self.__queueOutput.get(block=True, timeout=timeout)
-            return output if output is not None else ''
-        except Empty:
-            return None
-
-    def getCoord(self, timeout=0.0):
-        try:
-            output = self.__queueCoord.get(block=True, timeout=timeout)
-            if output is not None:
-                self.__clearQueue(self.__queueMessage)
-                return output.removesuffix('\n')
             return ''
-        except Empty:
-            return None
-
+        
     @staticmethod
-    def __clearQueue(queue: Queue):
+    def reset_queue(queue: Queue):
         while queue.qsize() > 1:
             queue.get_nowait()
 
 
-# noinspection PyUnresolvedReferences
-class Engine:
-    def __init__(self, path):
-        super().__init__()
-        self.__engine = subprocess.Popen(path, stdin=subprocess.PIPE,
-                                         stdout=subprocess.PIPE,
-                                         stderr=subprocess.PIPE,
-                                         bufsize=1, universal_newlines=True)
-        self.ID = self.__engine.pid
-        self.__stdoutReader = StdoutReader(self.__engine.stdout)
-        self.__timeManage = TimeManage(self.ID)
-
-    def send(self, *command):
-        """Send input to engine"""
-        new_command = []
-        for i in range(len(command)):
-            if i == 0:
-                new_command.append(str(command[i]).upper())
-            else:
-                new_command.append(str(command[i]))
-        command = ' '.join(new_command)
-        print('<--', command)
-        self.__engine.stdin.write(command + '\n')
-
-    def receive(self, option):
-        """Receive output from engine"""
-        match option:
-            case 'move':
-                return self.__getMove()
-            case 'output':
-                # For ABOUT, START 15
-                output = self.__stdoutReader.getOutput(self.__timeManage.setting.timeLeft / 1000)
-                return output.lower() if output is not None else ''
-
-    def __getMove(self):
-        output = self.__stdoutReader.getCoord(self.__timeManage.setting.timeLeft / 1000)
-        message = self.__stdoutReader.getMessage()
-        if output is None:
-            return TimeOut(f"Engine didn't return move after {self.__timeManage.setting.timeLeft}ms")
-        return Move(output, message)
-
-
 class IProtocol(ABC):
-    def setEngine(self, engine: Engine):
+    def __init__(self):
+        super().__init__()
+
+    @abstractmethod
+    def play(move: str, timeLeft: int):
         ...
 
-    def playMove(self, move: str):
-        ...
-
-    def setPos(self, listPos: [str]):
-        ...
-
+    @abstractmethod
     def stop(self):
         ...
 
+    @abstractmethod
     def quit(self):
         ...
 
-    def isReady(self, boardSize: int) -> bool:
+    @abstractmethod
+    def send_move(self, move: str):
         ...
 
-    def getEngineInfo(self) -> str:
+    @abstractmethod
+    def is_ready(self) -> bool:
         ...
 
-    def send(self, *args):
+    @abstractmethod
+    def send_command(self, *command):
         ...
 
-    def setConfig(self, keyword, value):
+    @abstractmethod
+    def configure(self, option: dict):
         ...
+
+
+class IProtocolHandler(ABC):
+    @abstractmethod
+    def get(self) -> StdoutReader:
+        ...
+
+
+class ProtocolFactory:
+    @staticmethod
+    def create(protocolType: str, sender: Callable, reader: Callable) -> IProtocol:
+        match protocolType:
+            case 'gomocup':
+                return GomocupProtocol(sender, reader)
+            case _:
+                raise ValueError("Unsupported protocol")  
+
+
+class ProtocolHandler:
+    @staticmethod
+    def create(protocolType: str, stream: TextIO) -> IProtocolHandler:
+        match protocolType:
+            case 'gomocup':
+                return GomocupProtocolHandler(stream)
+            case _:
+                raise ValueError("Unsupported protocol")
+
+
+class GomocupProtocolHandler(IProtocolHandler):
+    def __init__(self, stream: TextIO):
+        self.__stdoutReader = StdoutReader(stream)
+        self.__stdoutReader.add_category('coord', self.__is_coord)
+        self.__stdoutReader.add_category('message', self.__is_message)
+        self.__stdoutReader.add_category('output', self.__is_output)
+
+    def __is_coord(self, line: str) -> bool:
+        return bool(re.match(r'^\d+\s*,\s*\d+(\s+\d+\s*,\s*\d+)*$', line))
+
+    def __is_message(self, line: str) -> bool:
+        return line.lower().startswith("message")
+
+    def __is_output(self, line: str) -> bool:
+        return not line.lower().startswith("error")
+
+    def get(self):
+        return self.__stdoutReader
 
 
 class GomocupProtocol(IProtocol):
-    def __init__(self):
-        """Gomocup IProtocol implement"""
-        self.__engine : Engine = ...
+    def __init__(self, sender: Callable, reader: Callable):
+        super().__init__()
+        self.__sender = sender
+        self.__reader = reader
 
-    def setEngine(self, engine: Engine):
-        self.__engine : Engine = engine
-
-    def playMove(self, move):
-        self.__engine.send('turn', move)
-
-    def stop(self):
-        self.__engine.send('stop')
-
-    def quit(self):
-        self.__engine.send('end')
-
-    def setConfig(self, keyword, value):
-        self.__engine.send('info', keyword, value)
-
-    def getEngineInfo(self):
-        self.__engine.send('about')
-
-    def multiPv(self, value):
-        self.__engine.send('yxnbest', value)
-
-    def isReady(self, boardSize=15):
-        self.__engine.send('start', boardSize)
-        if self.__engine.receive('output') == 'ok':
-            return True
-        return False
-
-    def setPos(self, listOfMove: [str]):
-        self.__engine.send('board')
-        for idx, move in enumerate(listOfMove):
-            if len(listOfMove) % 2 == idx % 2:
-                self.__engine.send(move + ',' + '1')
-            else:
-                self.__engine.send(move + ',' + '2')
-        self.__engine.send('done')
-
-    def send(self, *args):
-        """Send custom command to engine"""
-        self.__engine.send(*args)
-
-
-# noinspection PyUnresolvedReferences
-class TimeManage:
-    DICT_OBJ = {}
-
-    def __new__(cls, key):
-        if not hasattr(cls, 'instance'):
-            cls.instance = super(TimeManage, cls).__new__(cls)
-        if key not in cls.DICT_OBJ:
-            cls.DICT_OBJ[key] = {}
-        cls.instance.__dict__ = cls.DICT_OBJ[key]
-        return cls.instance
-
-
-# noinspection PyTypeHints, PyUnresolvedReferences
-class Controller:
-    def __init__(self):
-        self.__engine     : Engine     = ...
-        self.__protocol   : IProtocol  = ...
-        self.__timeManage : TimeManage = ...
-
-    def setEngine(self, engine: Engine):
-        assert self.__protocol is not Ellipsis
-        self.__engine = engine
-        self.__protocol.setEngine(self.__engine)
-        self.__timeManage = TimeManage(self.__engine.ID)
-        self.__timeManage.setting : TimeSetting = TimeSetting()
-
-    def setProtocol(self, protocol: IProtocol):
-        self.__protocol = protocol
-
-    def get(self, option):
-        return self.__engine.receive(option)
-
-    def setConfigures(self, config: dict):
-        for i in config:
-            self.__protocol.setConfig(i, config[i])
-
-    def calcTimeLeft(self, delta):
-        self.__timeManage.setting.timeLeft -= delta - self.__timeManage.setting.timePlus
-
-    def updateTimeLeft(self):
-        self.__protocol.setConfig('time_left', self.__timeManage.setting.timeLeft)
-
-    def resetTime(self):
-        self.__timeManage.setting.timeLeft = self.__timeManage.setting.timeMatch
-        ...
-
-    def setTimeMatch(self, value):
-        """Time must be in millisecond"""
-        self.__timeManage.setting.timeMatch = value
-
-    def setTimeLeft(self, value):
-        """Time must be in millisecond"""
-        self.__timeManage.setting.timeLeft  = value
-
-    def playMove(self, move: str):
-        self.__protocol.playMove(move)
-
-    def setPos(self, listPos: [str]):
-        self.__protocol.setPos(listPos)
+    def play(self, move:str, timeLeft: int):
+        self.configure({'time_left': timeLeft})
+        self.send_move(move)
+        bestMove = self.__reader('coord', timeout=timeLeft)
+        info     = self.__reader('message', reset=True, timeout=timeLeft)
+        if not bestMove:
+            raise TimeOut(f'Timeout: Engine did not return move after {timeLeft}ms')
+        return PlayResult(bestMove, info)
 
     def stop(self):
-        self.__protocol.stop()
+        self.__sender('stop')
 
     def quit(self):
-        self.__protocol.quit()
+        self.__sender('end')
 
-    def isReady(self, boardSize=15) -> bool:
-        return self.__protocol.isReady(boardSize)
+    def send_move(self, move: str):
+        self.__sender('turn', move)
 
-    def getEngineInfo(self) -> str:
-        self.__protocol.getEngineInfo()
+    def is_ready(self, boardSize=15, timeout=0.0) -> bool:
+        self.__sender('start', boardSize)
+        return self.__reader('output', timeout=timeout) == 'ok'
 
-    def send(self, *args):
-        """Send custom command to engine"""
-        self.__protocol.send(*args)
+    def send_command(self, *command):
+        self.__sender(*command)
 
-    def setConfig(self, keyword, value):
-        self.__protocol.setConfig(keyword, value)
-
-
-class TimeSetting:
-    def __init__(self):
-        """
-        Default value:\n
-        timeMatch = 60000\n
-        timeLeft  = 60000\n
-        timePlus  = 0
-        """
-        self.timeMatch = 60000
-        self.timeLeft  = 60000
-        self.timePlus  = 0
-
-
-class TimeOut(Exception):
-    pass
+    def configure(self, option: dict):
+        for key, value in option.items():
+            self.__sender('info', key, value)
 
 
 class Move:
-    def __init__(self, move: str, info: str):
-        self.move: Coord = Coord(move)
-        self.__info = info.strip().lower().split()
-        self.info = self.__infoClassify()
+    def __init__(self, move: Union[Tuple[int, int], str]):
+        match move:
+            case str() if "," in move:
+                move = move.replace(" ", "")
+                self.col, self.row = map(int, move.split(","))
+            case str():
+                move = move.replace(" ", "")
+                self.col = ord(move[0].lower()) - 97
+                self.row = int(move[1:]) - 1
+            case tuple() if len(move) == 2:
+                self.col, self.row = move
 
-    def __infoClassify(self):
-        # MESSAGE depth 27-45 ev 245 n 100M n/ms 1700 tm 1145 pv a3 b4 f2
-        infoDict = {'depth': self.__info[self.__info.index('depth') + 1],
-                    'ev'   : Evaluation(self.__info[self.__info.index('ev') + 1]),
-                    'nodes': self.__info[self.__info.index('n') + 1],
-                    'pv'   : self.__info[self.__info.index('pv') + 1:],
-                    'tm'   : int(self.__info[self.__info.index('tm') + 1]) / 1000}
-        return infoDict
+    def to_num(self):
+        return self.col, self.row
+
+    def to_alphabet(self):
+        return f'{chr(97 + self.col)}{self.row + 1}'
+
+    def to_strnum(self):
+        return f'{self.col},{self.row}'
+
+    def __str__(self):
+        return self.to_alphabet()
+    
+    def __repr__(self):
+        return f'<Move {self.to_alphabet()}>'
+    
+
+class Mate:
+    def __init__(self, value: str):
+        self.__value = value
+
+    def step(self) -> int:
+        return int(self.__value.replace('m', ''))
 
 
-class Coord:
-    def __init__(self, coord: str):
-        self.coord = coord
+class Evaluate:
+    def __init__(self, value: str):
+        self.__value = value
 
-    def toNum(self):
-        return ord(self.coord[0]) - 97, int(self.coord[1:]) - 1
-
-
-class Evaluation:
-    def __init__(self, ev: str):
-        self.ev = int(ev) if ev.lstrip('-+').isnumeric() else ev
-
-    def toWinrate(self, n=2):
-        if isinstance(self.ev, int):
-            return f'{round((math.e ** (self.ev / 200)) / (1 + math.e ** (self.ev / 200)) * 100, n)}%'
+    def score(self) -> Union[str, float, Mate]:
+        if 'm' not in self.__value:
+            return float(self.__value) if self.__value.lstrip('-+').isnumeric() else self.__value
         else:
-            return self.ev
+            return Mate(self.__value)
+
+    def winrate(self):
+        def _to_score(x):
+            if 'm' not in x:
+                return float(x)
+            else:
+                value = Mate(self.__value).step()
+                return (20000 - abs(value)) + (2 * (abs(value) - 20000) & (value >> 31))
+        return 1 / (1 + math.e ** -(float(_to_score(self.__value))))
+
+    def is_winning(self):
+        return self.__value[:2] == '+m'
+
+    def is_losing(self):
+        return self.__value[:2] == '-m'
+
+
+class PlayResult:
+    def __init__(self, move: str, info: str):
+        self.move = Move(move)
+        self.info = self.__parse_uci(info) 
+
+    def __parse_uci(self, info):
+        pattern = re.compile(r"depth (\d+)-(\d+) ev ([+-]?\w?\d+) n (\d+)(?:\w) (?:\S*) (\d+) tm (\d+)(?:\S*) pv ((?:[a-zA-Z]\d+\s?)*)")
+        obj     = pattern.search(info)
+        if obj is not None:
+            return {
+                "depth"     : f'{obj.group(1)}-{obj.group(2)}',
+                "ev"        : Evaluate(obj.group(3)),
+                "node"      : obj.group(4),
+                "nps"       : obj.group(5),
+                "time"      : int(obj.group(6)),
+                "pv"        : list(map(Move, obj.group(7).split()))
+            }
+        return {}
+    
+    def parse_custom(self, pattern, key: Tuple):
+        pattern = re.compile(pattern)
+        obj     = pattern.search(self.info)
+        objDict = {}
+        if obj is not None:
+            for idx, value in enumerate(key):
+                objDict[value] = obj.group(idx)
+            
+        self.info.clear()
+        self.info.update(objDict)
+
+
+class Engine:
+    def __init__(self, path: str, protocolType: str):
+        self.__engine = subprocess.Popen(path, 
+                                         stdin=subprocess.PIPE, 
+                                         stdout=subprocess.PIPE, 
+                                         bufsize=1, universal_newlines=True)
+        self.id          = self.__engine.pid
+        self.protocol    = ProtocolFactory.create(protocolType, self.send, self.receive)
+        self.__stdReader = ProtocolHandler.create(protocolType, self.__engine.stdout).get()
+
+    def send(self, *command):
+        command = ' '.join(str(c).upper() if i == 0 else str(c) for i, c in enumerate(command))
+        self.__engine.stdin.write(f'{command}\n')
+        
+
+    def receive(self, name: str, reset=False, timeout=0.0):
+        return self.__stdReader.get(name, reset, timeout)
+    
+
+class TimeOut(Exception):
+    pass
