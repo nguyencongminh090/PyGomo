@@ -25,8 +25,7 @@ import argparse
 import json
 from typing import Optional
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 from pygomo import EngineClient, SearchInfo, Move, BoardPosition
 from pygomo.board import BitBoard, RenjuBitBoard, BLACK, WHITE, EMPTY
@@ -272,7 +271,7 @@ class GomokuGame:
         match_time_ms: int = 300000,
         initial_position: str = "",
         time_left_ms: Optional[int] = None,
-        config_file: str = "examples/console_config.json"
+        config_file: str = "console_config.json"
     ):
         self.engine_path = engine_path
         self.board_size = board_size
