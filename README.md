@@ -1,204 +1,143 @@
-# PyGomo Developer Cookbook 📖
+# PyGomo
 
-**PyGomo** is designed to be the backbone of your Gomoku application. Whether you are building a GUI, a tournament manager, or an analysis bot, this cookbook provides the recipes you need to get things done.
+**PyGomo** is a clean, modern, and extensible Python library for communicating with Gomoku engines via the [Gomocup protocol](https://gomocup.org/). It is designed for developers, researchers, and AI enthusiasts who need a robust interface to interact with Gomoku AI agents.
 
-## 🏗️ Architecture Overview
-
-Understanding the layers will help you know where to look:
-
-1.  **`pygomo` (Top Level)**: Exports common objects like `EngineClient`, `Move`, `SearchInfo`. Start here.
-2.  **`pygomo.board`**: The "Physics Engine". Handles board state, move generation (BitBoard), and Renju rules validation.
-3.  **`pygomo.client`**: The High-Level API. `EngineClient` lives here.
-4.  **`pygomo.protocol`**: The Translator. Converts Python objects to/from Gomocup protocol strings.
-5.  **`pygomo.transport`**: The Plumber. Handles subprocess creation and non-blocking I/O.
+ [![PyPI version](https://badge.fury.io/py/pygomo-lib.svg)](https://badge.fury.io/py/pygomo-lib)
+ [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+ [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
 ---
 
-## 🍳 Recipe 1: The "Hello World" Connection
+## 🚀 Features
 
-The simplest way to connect to an engine. Always use the `with` statement to ensure the subprocess is killed clean.
+*   **Robust Engine Management**: Automatically handles engine subprocesses (start, stop, restart).
+*   **Gomocup Protocol Support**: Full implementation of the standard Gomocup protocol (START, TURN, BOARD, INFO, etc.).
+*   **Real-time Search Info**: Parse and consume engine search data (depth, winrate, PV) in real-time via callbacks.
+*   **Rich Data Models**: Strongly typed models for `Move`, `BoardPosition`, and `SearchInfo`.
+*   **Extensible Architecture**: Built-in hook system and command registry for customizing behavior.
+*   **Board Library**: High-performance BitBoard implementation for standard and Renju rules.
+*   **Console Game**: Includes a built-in console-based client for playing against engines.
+
+## 📦 Installation
+
+Install via pip:
+
+```bash
+pip install pygomo-lib
+```
+
+> **Note:** The package name on PyPI is `pygomo-lib`, but the import name is `pygomo`.
+
+## ⚡ Quick Start
+
+Here is a minimal example of how to load an engine and play a game.
 
 ```python
 from pygomo import EngineClient
+from pygomo.protocol.models import SearchInfo
 
-# Engine path can be absolute or relative
-with EngineClient("./engines/piskvork") as engine:
-    # 1. Start a game (default 15x15)
+# Path to your Gomoku engine executable (e.g., Rapfi, Pela, Yixin)
+ENGINE_PATH = "./path/to/engine.exe"
+
+def on_search_info(info: SearchInfo):
+    """Callback to print search progress in real-time."""
+    print(f"Depth: {info.depth} | Winrate: {info.winrate_percent:.1f}% | PV: {info.pv[:4]}")
+
+# Initialize and connect
+with EngineClient(ENGINE_PATH) as engine:
+    # 1. Start a new game (Board size 15)
     engine.start(board_size=15)
-    
-    # 2. Make a move (Human plays h8)
-    result = engine.turn("h8")
-    
-    # 3. Print result
-    print(f"Engine replied: {result.move}")
+
+    # 2. Set strict time control (1 second per turn)
+    engine.configure(timeout_turn=1000)
+
+    # 3. Request the engine to play first (Black)
+    result = engine.begin(on_info=on_search_info)
+    print(f"Engine played: {result.move}")  # e.g., "h8"
+
+    # 4. Send our move (White)
+    my_move = "h9"
+    result = engine.turn(my_move, on_info=on_search_info)
+    print(f"Engine responded: {result.move}")
 ```
+
+## 🎮 Console Game
+
+PyGomo comes with a built-in console CLI for testing engines or playing directly in your terminal.
+
+```bash
+# Play against an engine
+pygomo-console --engine ./engines/rapfi --time 5000
+
+# Play using Renju rules
+pygomo-console --engine ./engines/pela --rule renju
+```
+
+**Key Commands in Console:**
+*   `move <coord>`: Play a move (e.g., `h8`).
+*   `undo`: Undo the last move.
+*   `swap`: Swap sides (if playing swap rule).
+*   `info`: Show last search info.
+*   `quit`: Exit.
+
+## 📚 Core Concepts
+
+### EngineClient
+The `EngineClient` class is the main entry point. It wraps the raw protocol communications into high-level Python methods like `.start()`, `.turn()`, and `.board()`.
+
+### Data Models
+PyGomo uses dataclasses to represent game entities cleanly:
+
+*   **`Move`**: Handles coordinates. Supports `(row, col)`, `"h8"` (algebraic), and `"7,7"` (numeric) formats.
+*   **`Evaluate`**: Parses engine scores, supporting raw values (e.g., "150"), winrates, and mate scores (e.g., "+M5").
+*   **`SearchInfo`**: Aggregates real-time search data (depth, NPS, nodes, PV).
+
+### Board Library
+Under `pygomo.board`, you'll find efficient board representations:
+*   `BitBoard`: 64-bit optimized board for standard Gomoku.
+*   `RenjuBitBoard`: Extends BitBoard with forbidden move logic (3x3, 4x4, overline) for Renju rules.
+
+## 🔧 Advanced Usage
+
+### Hooks
+You can inject custom logic into the command lifecycle using hooks.
+
+```python
+from pygomo.command import HookType
+
+def log_command(context):
+    print(f"Sending command: {context.command}")
+
+engine.hooks.on(HookType.PRE_EXECUTE)(log_command)
+```
+
+### Custom Commands
+If your engine supports non-standard commands, you can send them raw:
+
+```python
+# Send "MY_CUSTOM_CMD arg1"
+engine.send_raw("MY_CUSTOM_CMD arg1")
+response = engine.receive_raw()
+```
+
+## 🛠️ Development
+
+To set up a development environment:
+
+1.  Clone the repository.
+2.  Install development dependencies:
+    ```bash
+    pip install -e .[dev]
+    ```
+3.  Run tests:
+    ```bash
+    pytest tests/
+    ```
+
+## 📄 License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🍳 Recipe 2: Configuring The Engine
-
-Before starting the game, you often need to set limits. Note that `start()` resets some engine internals, so configure *after* `start()` usually (depending on engine quirk, but safely: connect -> start -> configure).
-
-```python
-with EngineClient("./engines/rapfi") as engine:
-    engine.start(15)
-    
-    # Setup Time Control
-    engine.set_time(
-        turn_time_ms=5000,    # 5 seconds per move
-        match_time_ms=300000, # 5 minutes total
-        time_left_ms=300000   # Current remaining time
-    )
-    
-    # Setup Rules (1 = Standard, 4 = Renju)
-    engine.set_rule(1)
-    
-    # Advanced Config (Thread, Hash, etc.)
-    engine.set_threads(4)
-    engine.set_memory(1024 * 1024 * 1024) # 1GB
-```
-
----
-
-## 🍳 Recipe 3: Dealing with Realtime Search Info
-
-Modern engines (like Rapfi, Yixin) provide a stream of search data while thinking. You can tap into this via the `on_info` callback.
-
-```python
-from pygomo import SearchInfo
-
-def my_info_handler(info: SearchInfo):
-    # This is called repeatedly while engine thinks!
-    if info.depth > 0:
-        pv_string = " ".join(str(m) for m in info.pv[:5])
-        print(f"\rDepth: {info.depth} | Eval: {info.eval.raw_value} | PV: {pv_string}", end="")
-
-# Pass the handler to any thinking command (turn, begin, board, nbest)
-result = engine.turn("h8", on_info=my_info_handler)
-
-# The final 'result' also contains the LAST search info received
-print(f"\nFinal Winrate: {result.search_info.winrate_percent:.2f}%")
-```
-
-**Understanding `SearchInfo` fields:**
-*   `depth`/`sel_depth`: Search depth.
-*   `eval`: `Evaluate` object. Use `.raw_value` for engine score, `.score()` for int, `.winrate_percent()` for 0-100%.
-*   `pv`: List of `Move` objects (Principal Variation / Best Line).
-*   `nodes`/`nps`: Performance metrics.
-
----
-
-## 🍳 Recipe 4: Managing Board State with BitBoard
-
-Don't track 2D arrays yourself. Use `pygomo.board` for high-performance state management.
-
-```python
-from pygomo.board import BitBoard, RenjuBitBoard
-
-# Use RenjuBitBoard for complex Renju rules (double-3, double-4, overline)
-board = RenjuBitBoard(size=15)
-
-# 1. Place moves
-board.place("h8") # Black
-board.place("h9") # White
-
-# 2. Check for Win/Forbidden
-last_move = board.get_last_move()
-win_info = board.check_win(last_move)
-
-if win_info:
-    print(f"Winner: {win_info.winner}") # 1=Black, 2=White
-    print(f"Line: {win_info.direction}") # e.g. [(7,7), (8,8)...]
-
-# 3. Check Forbidden (Renju Only)
-if board.is_forbidden(move="j9", color=1): # Is j9 forbidden for Black?
-    print("Foul!")
-
-# 4. Undo
-board.undo() # Takes back h9
-board.undo() # Takes back h8
-```
-
----
-
-## 🍳 Recipe 5: Synchronizing Engine with Custom Positions
-
-If you implement `Undo`, `Redo`, or `Load Game`, you must sync the engine. The engine has its own internal board.
-
-```python
-# ... user clicks undo ...
-my_local_board.undo()
-
-# SYNC RECIPE:
-# 1. Convert local board to protocol objects
-protocol_position = my_local_board.to_position() 
-
-# 2. Send BOARD command
-# start_thinking=False means "just set the board, don't move yet"
-engine.board(protocol_position, start_thinking=False)
-```
-
----
-
-## 🍳 Recipe 6: Parsing User Input Handling
-
-Users type garbage. `Move` handles it.
-
-```python
-from pygomo import Move
-
-try:
-    m1 = Move("h8")       # Standard algebraic
-    m2 = Move("H8")       # Case insensitive
-    m3 = Move("7,7")      # Numeric (0-indexed)
-    m4 = Move((7, 7))     # Tuple
-    
-    print(m1.col, m1.row) # 7, 7
-except ValueError:
-    print("Invalid move format")
-```
-
----
-
-## 🍳 Recipe 7: Building a Non-Blocking GUI Loop
-
-If you use `asyncio` or a GUI event loop (PyQt/Tkinter), you don't want `engine.turn()` to freeze the UI. PyGomo is synchronous by default (for simplicity), but you can wrap it easily.
-
-**Pattern for Threading (Simplest):**
-```python
-import threading
-
-def worker():
-    # This blocks, but it's in a thread
-    result = engine.turn("h8", on_info=update_gui_progress)
-    # Post result to GUI thread
-    gui.post_event(GameMoveEvent(result.move))
-
-thread = threading.Thread(target=worker)
-thread.start()
-```
-
----
-
-## 🍳 Recipe 8: Custom Commands
-
-Need to send a command PyGomo doesn't support explicitly?
-
-```python
-# Send raw string (fire and forget)
-engine.send_raw("MY_CUSTOM_COMMAND args")
-
-# Execute and want response (handles timeout/locking)
-# This returns a CommandResult object
-result = engine.execute("YXSHOWINFO") 
-print(result.data) 
-```
-
-## 🛠️ Developer Checklist
-
-When implementing a full game:
-
-1.  [ ] **Always handle specific Exceptions**: Engines crash. Catch `RuntimeError` or timeouts on turn execution.
-2.  [ ] **Hash Synchronization**: If your board supports Zobrist hashing (`board.hash`), check it against the engine occasionally (Rapfi supports `checksum` in some debug modes) to detect desyncs.
-3.  [ ] **Clean Shutdown**: Ensure `engine.quit()` is called. Orphaned engine processes consume CPU.
-4.  [ ] **Protocol Logging**: For debugging, you can hook into the transport or use `run_game.sh` which prints what it's doing.
+*Built with ❤️ for the Gomoku community.*
